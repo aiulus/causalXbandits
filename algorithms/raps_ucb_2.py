@@ -3,6 +3,10 @@ from itertools import product
 from mab.algorithms.ucb import UCB
 
 
+def generate_parent_assignments(parent_set):
+    return [dict(zip(parent_set, values)) for values in product([0, 1], repeat=len(parent_set))]
+
+
 class RAPS_UCB:
     def __init__(self, scm, T: int, delta: float = 0.01, epsilon: float = 0.05, B: int = None):
         """
@@ -32,7 +36,7 @@ class RAPS_UCB:
         print(f"Discovered parent set: {self.parent_set}")
 
         # --- Phase 2: Setup UCB over 2^|P| arms ---
-        self.arm_list = self.generate_parent_assignments(self.parent_set)
+        self.arm_list = generate_parent_assignments(self.parent_set)
         self.arm_index = {frozenset(a.items()): i for i, a in enumerate(self.arm_list)}
 
         self.ucb = UCB(n_arms=len(self.arm_list), horizon=self.T, delta=self.delta)
@@ -49,9 +53,6 @@ class RAPS_UCB:
         self.best_action = self.arm_list[np.argmax(self.ucb.means)]
         print(f"Best empirical action: {self.best_action}")
 
-    def generate_parent_assignments(self, parent_set):
-        return [dict(zip(parent_set, values)) for values in product([0, 1], repeat=len(parent_set))]
-
     def discover_all_parents(self):
         """
         Plug in your implementation of Algorithm 2 here.
@@ -59,7 +60,8 @@ class RAPS_UCB:
         """
         # Replace this call with your actual implementation
         from algorithms.raps import RAPS
-        return RAPS.discover_all_parents(self.scm, B=self.B, delta=self.delta, epsilon=self.epsilon)
+        raps = RAPS(self.scm, B=self.B, delta=self.delta, epsilon=self.epsilon)
+        return raps.discover_all_parents()
 
     def get_average_reward(self):
         return np.mean(self.regret)
