@@ -1,6 +1,28 @@
 # Causal Bandits
 
+## Repository Structure
 
+```plaintext
+.
+├── algorithms/
+│   ├── __init__.py               
+│   ├── confounded_budgeted.py
+│   ├── pomis.py
+│   ├── raps.py
+│   ├── raps_ucb.py
+├── causal_models/ # Submodule
+├── experiments/                
+├── integrator/                   
+│   ├── __init__.py
+│   ├── causal_bandit.py  
+├── mab/ # Submodule
+├── scripts/
+├── tests/  
+├── Makefile
+├── README.md  
+└── setup.sh             
+
+```
 ## 🔧 Project Setup & Submodule Management
 
 This project integrates multiple submodules (e.g., `causal_models`, `mab`) that live in separate repositories. To manage them efficiently, use the provided script:
