@@ -1,0 +1,6 @@
+[submodule "mab"]
+	path = mab
+	url = https://github.com/aiulus/mab.git
+[submodule "causal_models"]
+	path = causal_models
+	url = https://github.com/aiulus/causal_models.git
