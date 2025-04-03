@@ -1,17 +1,16 @@
 import sys
+from abc import ABC
 from pathlib import Path
 
 # Add submodule repo paths
 sys.path.append(str(Path(__file__).resolve().parent.parent / "mab"))
 sys.path.append(str(Path(__file__).resolve().parent.parent / "causal-models"))
 
-# integrator/causal_bandits.py
-
 from causal_models.scm.base import SCM
 from mab.bandits.base import Bandit
 
 
-class SCMDrivenBandit(Bandit):
+class SCMGovernedBandit(Bandit, ABC):
     def __init__(self, scm: SCM, reward_node: str, action_nodes: list, seed=None):
         self.scm = scm
         self.reward_node = reward_node
