@@ -1,89 +1,68 @@
 import networkx as nx
-from itertools import chain, combinations
-from typing import List, Set, Tuple, Dict
-from causal_models.graphs.utils import get_ancestors
+from typing import List, Set, Tuple
+from causal_models.graphs.utils import (
+    get_ancestors,
+    get_descendants,
+    c_component,
+    reversed_topological,
+    induce_subgraph,
+)
 
-def find_muct(G: nx.DiGraph, Y: str) -> Set[str]:
-    H = G.subgraph(get_ancestors(G, Y)).copy()
-    # Use bidirected edges to grow a MUCT
-    muct = {Y}
+def find_muct_and_ib(G: nx.DiGraph, Y: str) -> Tuple[Set[str], Set[str]]:
+    """
+    Compute the minimal unobserved confounder territory (MUCT) and interventional border (IB)
+    relative to the reward variable Y.
+    """
+    H = induce_subgraph(G, get_ancestors(G, Y))
+    T = {Y}
+
+    # Expand via bidirected c-components and descendants
     changed = True
     while changed:
         changed = False
-        descendants = get_descendants(H, muct)
-        cc = set()
-        for c_set in c_component(H):
-            if muct.intersection(c_set):
-                cc.update(c_set)
-        new = cc.union(descendants)
-        if not new.issubset(muct):
-            muct.update(new)
+        new_T = set(T)
+        for comp in c_component(H):
+            if T & comp:
+                new_T |= comp
+        new_T |= get_descendants(H, new_T)
+        if new_T != T:
             changed = True
-    return muct
+            T = new_T
+
+    IB = set()
+    for node in T:
+        for parent in G.predecessors(node):
+            if parent not in T:
+                IB.add(parent)
+
+    return T, IB
 
 
-def get_interventional_border(G: nx.DiGraph, muct: Set[str]) -> Set[str]:
-    parents = set()
-    for node in muct:
-        for p in G.predecessors(node):
-            if p not in muct:
-                parents.add(p)
-    return parents
-
-
-def induce_subgraph(G: nx.DiGraph, nodes: Set[str]) -> nx.DiGraph:
-    return G.subgraph(nodes).copy()
-
-
-def pomiss(G: nx.DiGraph, Y: str) -> List[Set[str]]:
-    T = find_muct(G, Y)
-    X = get_interventional_border(G, T)
+def find_pomis(G: nx.DiGraph, Y: str) -> List[Set[str]]:
+    """
+    Implements the recursive algorithm from the POMIS paper (Alg. 1 and 2)
+    to find all Possibly-Optimal Minimal Intervention Sets.
+    """
+    T, X = find_muct_and_ib(G, Y)
     H = induce_subgraph(G, T.union(X))
-    π = reversed_topological(H, T - {Y})
-    found = {frozenset(X)}
-    found |= sub_pomiss(H, Y, π, set())
-    return [set(s) for s in found]
+    topo_order = reversed_topological(H, T - {Y})
+
+    return [X] + _subpomis(H, Y, topo_order, blocked=T - {Y})
 
 
-def sub_pomiss(G: nx.DiGraph, Y: str, π: List[str], O: Set[str]) -> Set[frozenset]:
-    results = set()
-    for i, πi in enumerate(π):
-        G_i = G.copy()
-        G_i.remove_edges_from(list(G_i.in_edges(πi)))
-        T = find_muct(G_i, Y)
-        X = get_interventional_border(G_i, T)
-        π_next = π[i+1:]
-        O_next = O.union(π[:i])
-        if not X.intersection(O_next):
-            results.add(frozenset(X))
-            if π_next:
-                subgraph = induce_subgraph(G_i, T.union(X))
-                results |= sub_pomiss(subgraph, Y, π_next, O_next)
-    return results
+def _subpomis(G: nx.DiGraph, Y: str, order: List[str], blocked: Set[str]) -> List[Set[str]]:
+    P = []
+    for i, v in enumerate(order):
+        sub_order = order[i+1:]
+        O_prime = blocked.union(order[:i])
+        G_v = G.copy()
+        G_v.remove_edges_from(list(G_v.in_edges(v)))
 
+        T, X = find_muct_and_ib(G_v, Y)
 
-# Example use: KL-UCB bandit with arms from POMIS
-def pomis_kl_ucb(
-    bandit_env,
-    G: nx.DiGraph,
-    Y: str,
-    horizon: int,
-    kl_ucb_fn,
-    value_domain: Dict[str, List]
-):
-    # Get valid intervention sets (POMIS)
-    pomis_sets = pomiss(G, Y)
-
-    # Enumerate all do interventions over these sets
-    def intervention_space(vars):
-        from itertools import product
-        doms = [value_domain[v] for v in vars]
-        for vals in product(*doms):
-            yield dict(zip(vars, vals))
-
-    arms = []
-    for pomis_set in pomis_sets:
-        arms.extend(intervention_space(pomis_set))
-
-    # Run KL-UCB over the resulting arm set
-    return kl_ucb_fn(bandit_env, arms, horizon)
+        if not X & O_prime:
+            P.append(X)
+            if sub_order:
+                H = induce_subgraph(G_v, T.union(X))
+                P += _subpomis(H, Y, sub_order, O_prime)
+    return P
